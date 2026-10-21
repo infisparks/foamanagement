@@ -256,7 +256,7 @@ export default function TeamMembersView({
           </thead>
           <tbody>
             {profiles.map((p) => {
-              const memberTasks = tasks.filter((t) => t.assigned_to === p.id);
+              const memberTasks = tasks.filter((t) => t.assigned_to === p.id && !t.is_deleted);
               const completedCount = memberTasks.filter((t) => t.status === 'completed').length;
               const isPinging = testingPhone === p.id;
 

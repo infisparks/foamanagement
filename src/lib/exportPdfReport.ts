@@ -216,6 +216,7 @@ export async function generateTeamReportPDF(options: ExportReportOptions) {
   const tableRows: any[] = [];
 
   filteredTasks.forEach((task) => {
+    if (task.is_deleted) return;
     const client = clients.find((c) => c.id === task.client_id);
     const assignee = profiles.find((p) => p.id === task.assigned_to);
 
@@ -263,10 +264,13 @@ export async function generateTeamReportPDF(options: ExportReportOptions) {
       statusText,
     ]);
 
-    // Attached Comments Row (in PDF below the task)
-    const taskComments = commentsByTaskId[task.id] || [];
+    // Attached Notes Row (in PDF below the task, latest notes on top)
+    const rawComments = commentsByTaskId[task.id] || [];
+    const taskComments = [...rawComments].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
     if (taskComments.length > 0) {
-      const commentHeader = `💬 Collaboration & Audit Comments (${taskComments.length}):`;
+      const commentHeader = `📝 Collaboration & Audit Notes (${taskComments.length}):`;
       const commentLines = taskComments.map((c, i) => {
         const time = new Date(c.created_at).toLocaleDateString('en-GB', {
           day: 'numeric',
@@ -357,9 +361,17 @@ export async function generateTeamReportPDF(options: ExportReportOptions) {
     },
   });
 
-  const memberFileName = selectedProfile
-    ? selectedProfile.name.toLowerCase().replace(/\s+/g, '-')
-    : 'all-members';
-  const fileName = `first-option-audit-${memberFileName}-${new Date().toISOString().slice(0, 10)}.pdf`;
-  doc.save(fileName);
+  // Open in a new browser tab via blob URL (do not force download)
+  const pdfBlob = doc.output('blob');
+  const blobUrl = URL.createObjectURL(pdfBlob);
+  const win = window.open(blobUrl, '_blank');
+  if (!win) {
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 }

@@ -151,13 +151,13 @@ export async function notifyTaskAssigneeNewComment({
       ? window.location.origin
       : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
-  const message = `💬 *New Comment on Your Task*
+  const message = `📝 *New Note on Your Task*
 Hello ${assigneeName || 'Team Member'},
 
-*${commenterName}* (${commenterDesignation || 'Team'}) commented on your task:
+*${commenterName}* (${commenterDesignation || 'Team'}) added a note to your task:
 📌 *Task:* ${taskTitle} (Client: ${clientName || 'General'})
 
-💬 *" ${commentText} "*
+📝 *" ${commentText} "*
 
 🔗 *Open Task Portal:* ${appUrl}
 — *First Option Agency*`;

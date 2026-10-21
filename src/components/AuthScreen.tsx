@@ -252,7 +252,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               Real-time deliverables, delay audits & WhatsApp alerts.
             </div>
             <p style={{ fontSize: 12.5, color: '#64748B', lineHeight: 1.6, marginBottom: 26 }}>
-              Automated notifications for client onboarding and team comments, deadline delay tracking for salary appraisals, and multi-team collaboration.
+              Automated notifications for client onboarding and team notes, deadline delay tracking for salary appraisals, and multi-team collaboration.
             </p>
 
             {/* Feature Pills */}
@@ -288,7 +288,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     Evolution WhatsApp Dispatch
                   </div>
                   <div style={{ fontSize: 11, color: '#64748B' }}>
-                    Instant alerts to all members on client onboarding & comments
+                    Instant alerts to all members on client onboarding & notes
                   </div>
                 </div>
               </div>

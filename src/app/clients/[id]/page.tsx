@@ -8,9 +8,13 @@ import { supabase } from '@/lib/supabase';
 import { Client, Task, Profile } from '@/types/crm';
 import DelayBadge from '@/components/DelayBadge';
 import TaskCommentsModal from '@/components/TaskCommentsModal';
+import DeleteTaskConfirmModal from '@/components/DeleteTaskConfirmModal';
+import DeleteConfirmModal from '@/components/DeleteConfirmModal';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import TaskTitleInputWithDropdown from '@/components/TaskTitleInputWithDropdown';
+import { renderTextWithLinks } from '@/lib/renderLinks';
+import { formatTimeAgo } from '@/lib/timeAgo';
 import {
   ArrowLeft,
   Building2,
@@ -37,6 +41,7 @@ import {
   UserCheck,
   LogOut,
   Sparkles,
+  RotateCcw,
   X,
   Flame,
   Menu
@@ -91,10 +96,14 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
   const [userTemplates, setUserTemplates] = useState<UserTaskTemplate[]>([]);
 
   // Interactive Task states
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed' | 'delayed'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed' | 'delayed' | 'deleted'>('all');
   const [taskSearch, setTaskSearch] = useState('');
   const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null);
   const [commentTask, setCommentTask] = useState<Task | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   // Auth Guard
   useEffect(() => {
@@ -200,7 +209,8 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
         const { data: commentsCountData } = await supabase
           .from('task_comments')
           .select('task_id')
-          .in('task_id', taskIds);
+          .in('task_id', taskIds)
+          .or('is_deleted.is.null,is_deleted.eq.false');
 
         if (commentsCountData) {
           commentsCountData.forEach((c: { task_id: string }) => {
@@ -383,22 +393,60 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
     }
   }
 
-  // Delete Task
-  async function handleDeleteTask(taskId: string, title: string, createdBy?: string) {
+  // Soft Delete Task (Sets is_deleted: true)
+  async function handleSoftDeleteTask(taskId: string) {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', taskId);
+    if (error) throw error;
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, is_deleted: true } : t)));
+  }
+
+  // Restore Task (Sets is_deleted: false)
+  async function handleRestoreTask(task: Task) {
     const isAdmin = currentUser?.role === 'admin';
-    if (!isAdmin && createdBy !== currentUser?.id) {
-      alert('Only Admin or the task creator can delete this deliverable.');
+    const canRestore = isAdmin || task.assigned_to === currentUser?.id || task.created_by === currentUser?.id;
+    if (!canRestore) {
+      alert('Permission denied: You can only restore tasks assigned to or created by you.');
       return;
     }
-
-    if (!confirm(`Are you sure you want to delete deliverable "${title}"?`)) return;
-
     try {
-      const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+      const { error } = await supabase
+        .from('tasks')
+        .update({ is_deleted: false, updated_at: new Date().toISOString() })
+        .eq('id', task.id);
       if (error) throw error;
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, is_deleted: false } : t)));
     } catch (err: any) {
-      alert('Failed to delete task: ' + err.message);
+      console.error('Failed to restore deliverable:', err);
+      alert('Could not restore deliverable: ' + err.message);
+    }
+  }
+
+  // Soft Delete Client (Sets is_deleted: true)
+  async function handleSoftDeleteCurrentClient() {
+    if (!client || !isAdmin) return;
+    const { error } = await supabase
+      .from('clients')
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', client.id);
+    if (error) throw error;
+    router.push('/');
+  }
+
+  // Restore Client (Sets is_deleted: false)
+  async function handleRestoreCurrentClient() {
+    if (!client || !isAdmin) return;
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update({ is_deleted: false, updated_at: new Date().toISOString() })
+        .eq('id', client.id);
+      if (error) throw error;
+      setClient((prev) => (prev ? { ...prev, is_deleted: false } : prev));
+    } catch (err: any) {
+      alert('Failed to restore client: ' + err.message);
     }
   }
 
@@ -415,11 +463,13 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
     });
   }
 
-  // Computed metrics
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t) => t.status === 'completed').length;
+  // Computed metrics (excluding soft-deleted tasks)
+  const activeTasks = tasks.filter((t) => !t.is_deleted);
+  const deletedTasks = tasks.filter((t) => t.is_deleted);
+  const totalTasks = activeTasks.length;
+  const completedTasks = activeTasks.filter((t) => t.status === 'completed').length;
   const pendingTasks = totalTasks - completedTasks;
-  const delayedTasks = tasks.filter((t) => {
+  const delayedTasks = activeTasks.filter((t) => {
     if (t.is_delayed) return true;
     if (t.status === 'pending') {
       return new Date().getTime() > new Date(t.deadline).getTime();
@@ -436,6 +486,12 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
       (t.assignee?.name && t.assignee.name.toLowerCase().includes(taskSearch.toLowerCase()));
 
     if (!matchesSearch) return false;
+
+    if (filterStatus === 'deleted') {
+      return t.is_deleted === true;
+    }
+
+    if (t.is_deleted) return false;
 
     if (filterStatus === 'pending') return t.status === 'pending';
     if (filterStatus === 'completed') return t.status === 'completed';
@@ -693,6 +749,49 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
             </div>
           )}
 
+          {/* Trash notice if client is soft-deleted */}
+          {client.is_deleted && (
+            <div
+              style={{
+                padding: '12px 18px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 16,
+                color: '#991B1B',
+                fontSize: 13,
+                flexWrap: 'wrap',
+                gap: 8,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Trash2 size={16} color="#DC2626" />
+                <span>
+                  <strong>Trash Notice:</strong> This client record is currently in the Trash.
+                </span>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={handleRestoreCurrentClient}
+                  className="btn-secondary btn-sm"
+                  style={{
+                    color: '#059669',
+                    backgroundColor: '#ECFDF5',
+                    borderColor: '#A7F3D0',
+                    gap: 4,
+                    fontSize: 12,
+                  }}
+                >
+                  <RotateCcw size={13} />
+                  <span>Restore Client</span>
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Client Header Hero Card */}
           <div className="card-clean" style={{ padding: '20px 24px' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
@@ -735,6 +834,21 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                         {client.industry}
                       </span>
                     )}
+                    {client.is_deleted && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          backgroundColor: '#FEF2F2',
+                          color: '#DC2626',
+                          padding: '2px 7px',
+                          borderRadius: 4,
+                          border: '1px solid #FECACA',
+                        }}
+                      >
+                        TRASH
+                      </span>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4, flexWrap: 'wrap', fontSize: 12, color: '#64748B' }}>
@@ -761,6 +875,9 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Calendar size={12} />
                       <span>Onboarded: {formatDate(client.created_at)}</span>
+                      <span style={{ color: '#6366F1', fontWeight: 600, fontSize: 11 }}>
+                        ({formatTimeAgo(client.created_at)})
+                      </span>
                     </div>
                   </div>
 
@@ -778,14 +895,14 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                       }}
                     >
                       <span style={{ fontWeight: 600, color: '#334155' }}>Brief: </span>
-                      {client.notes}
+                      {renderTextWithLinks(client.notes)}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Action: Open Add Task Drawer */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Action: Open Add Task Drawer & Client Delete/Restore */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   onClick={() => {
                     setFormError('');
@@ -797,6 +914,37 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                   <Plus size={15} />
                   <span>Add Deliverable Task</span>
                 </button>
+
+                {isAdmin && (
+                  client.is_deleted ? (
+                    <button
+                      onClick={handleRestoreCurrentClient}
+                      className="btn-secondary"
+                      style={{
+                        padding: '7px 14px',
+                        fontSize: 12.5,
+                        color: '#059669',
+                        backgroundColor: '#ECFDF5',
+                        borderColor: '#A7F3D0',
+                        gap: 4,
+                      }}
+                      title="Restore client from trash"
+                    >
+                      <RotateCcw size={14} />
+                      <span>Restore Client</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowDeleteClientModal(true)}
+                      className="btn-danger"
+                      style={{ padding: '7px 12px', fontSize: 12.5 }}
+                      title="Move client to trash (Type DELETE to confirm)"
+                    >
+                      <Trash2 size={14} />
+                      <span className="hidden sm:inline">Move to Trash</span>
+                    </button>
+                  )
+                )}
               </div>
             </div>
 
@@ -879,7 +1027,7 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                   Deliverables & Objectives ({filteredTasks.length})
                 </h2>
                 <p style={{ fontSize: 11.5, color: '#64748B', margin: 0 }}>
-                  Tick off deliverables, audit timestamps, and collaborate via WhatsApp-linked comments
+                  Tick off deliverables, audit timestamps, and collaborate via WhatsApp-linked notes
                 </p>
               </div>
 
@@ -891,9 +1039,13 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                     { id: 'pending', label: `Pending (${pendingTasks})` },
                     { id: 'completed', label: `Completed (${completedTasks})` },
                     { id: 'delayed', label: `Delayed (${delayedTasks})` },
-                  ] as const
+                    ...(deletedTasks.length > 0 || filterStatus === 'deleted'
+                      ? [{ id: 'deleted', label: `🗑️ Trash (${deletedTasks.length})` }]
+                      : []),
+                  ] as { id: 'all' | 'pending' | 'completed' | 'delayed' | 'deleted'; label: string }[]
                 ).map((tab) => {
                   const isActive = filterStatus === tab.id;
+                  const isTrashTab = tab.id === 'deleted';
                   return (
                     <button
                       key={tab.id}
@@ -903,9 +1055,23 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                         fontWeight: isActive ? 600 : 500,
                         padding: '4px 10px',
                         borderRadius: 6,
-                        border: isActive ? '1px solid #6366F1' : '1px solid #E2E8F0',
-                        backgroundColor: isActive ? '#EEF2FF' : '#FFFFFF',
-                        color: isActive ? '#4338CA' : '#475569',
+                        border: isActive
+                          ? isTrashTab
+                            ? '1px solid #EF4444'
+                            : '1px solid #6366F1'
+                          : '1px solid #E2E8F0',
+                        backgroundColor: isActive
+                          ? isTrashTab
+                            ? '#FEF2F2'
+                            : '#EEF2FF'
+                          : '#FFFFFF',
+                        color: isActive
+                          ? isTrashTab
+                            ? '#DC2626'
+                            : '#4338CA'
+                          : isTrashTab
+                          ? '#DC2626'
+                          : '#475569',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
                       }}
@@ -1282,12 +1448,27 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                                         style={{
                                           fontSize: 13.5,
                                           fontWeight: 600,
-                                          color: isCompleted ? '#64748B' : '#0F172A',
-                                          textDecoration: isCompleted ? 'line-through' : 'none',
+                                          color: task.is_deleted ? '#94A3B8' : isCompleted ? '#64748B' : '#0F172A',
+                                          textDecoration: task.is_deleted || isCompleted ? 'line-through' : 'none',
                                         }}
                                       >
                                         {task.title}
                                       </span>
+
+                                      {task.is_deleted && (
+                                        <span
+                                          className="badge"
+                                          style={{
+                                            backgroundColor: '#FEE2E2',
+                                            color: '#DC2626',
+                                            border: '1px solid #FECACA',
+                                            fontSize: 10,
+                                            padding: '1px 6px',
+                                          }}
+                                        >
+                                          In Trash
+                                        </span>
+                                      )}
 
                                       {/* Status & Live Countdown Badge */}
                                       <DelayBadge
@@ -1310,11 +1491,17 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                                         <span>Deadline: {formatDate(task.deadline)}</span>
                                       </span>
 
-                                      <span>Added: {formatDate(task.created_at)}</span>
+                                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        <span>Added: {formatDate(task.created_at)}</span>
+                                        <span style={{ color: '#6366F1', fontWeight: 600, fontSize: 10 }}>
+                                          ({formatTimeAgo(task.created_at)})
+                                        </span>
+                                      </span>
 
                                       {isCompleted && task.completed_at && (
-                                        <span style={{ color: '#059669', fontWeight: 500 }}>
-                                          Completed: {formatDate(task.completed_at)}
+                                        <span style={{ color: '#059669', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                          <span>Completed: {formatDate(task.completed_at)}</span>
+                                          <span style={{ opacity: 0.85, fontSize: 10 }}>({formatTimeAgo(task.completed_at)})</span>
                                         </span>
                                       )}
                                     </div>
@@ -1323,7 +1510,7 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
 
                                 {/* Right: Action Buttons */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  {/* Comments Button with dynamic total count badge */}
+                                  {/* Notes Button with dynamic total count badge */}
                                   <button
                                     onClick={() => setCommentTask(task)}
                                     className="btn-secondary btn-sm"
@@ -1338,15 +1525,15 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                                     }}
                                     title={
                                       (task.comments_count || 0) > 0
-                                        ? `${task.comments_count} ${task.comments_count === 1 ? 'comment' : 'comments'} on this deliverable`
-                                        : 'Add or view comments'
+                                        ? `${task.comments_count} ${task.comments_count === 1 ? 'note' : 'notes'} on this deliverable`
+                                        : 'Add or view notes'
                                     }
                                   >
                                     <MessageSquare
                                       size={12}
                                       color={(task.comments_count || 0) > 0 ? '#4F46E5' : '#6366F1'}
                                     />
-                                    <span>Comments</span>
+                                    <span>Notes</span>
                                     {(task.comments_count || 0) > 0 && (
                                       <span
                                         style={{
@@ -1369,15 +1556,35 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
                                     )}
                                   </button>
 
-                                  {/* Delete Button */}
-                                  {(currentUser?.role === 'admin' || task.created_by === currentUser?.id) && (
+                                  {/* Delete or Restore Button */}
+                                  {task.is_deleted ? (
                                     <button
-                                      onClick={() => handleDeleteTask(task.id, task.title, task.created_by)}
-                                      className="btn-danger btn-sm"
-                                      title="Delete deliverable"
+                                      onClick={() => handleRestoreTask(task)}
+                                      className="btn-secondary btn-sm"
+                                      style={{
+                                        padding: '4px 10px',
+                                        fontSize: 11.5,
+                                        gap: 5,
+                                        color: '#059669',
+                                        backgroundColor: '#ECFDF5',
+                                        borderColor: '#A7F3D0',
+                                        fontWeight: 600,
+                                      }}
+                                      title="Restore deliverable to active"
                                     >
-                                      <Trash2 size={12} />
+                                      <RotateCcw size={12} />
+                                      <span>Restore</span>
                                     </button>
+                                  ) : (
+                                    (currentUser?.role === 'admin' || task.assigned_to === currentUser?.id || task.created_by === currentUser?.id) && (
+                                      <button
+                                        onClick={() => setTaskToDelete({ ...task, client: client || undefined })}
+                                        className="btn-danger btn-sm"
+                                        title="Move deliverable to Trash"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    )
                                   )}
                                 </div>
                               </div>
@@ -1646,6 +1853,26 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
         task={commentTask}
         currentUser={currentUser}
         onCommentAdded={loadClientAndTasks}
+      />
+
+      {/* Delete Task Confirmation Modal */}
+      <DeleteTaskConfirmModal
+        isOpen={Boolean(taskToDelete)}
+        onClose={() => setTaskToDelete(null)}
+        task={taskToDelete}
+        onConfirmDelete={handleSoftDeleteTask}
+      />
+
+      {/* Delete Client Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={showDeleteClientModal}
+        onClose={() => setShowDeleteClientModal(false)}
+        title="Move Client to Trash?"
+        subtitle="Type DELETE to confirm client soft deletion"
+        itemTitle={client?.name || ''}
+        itemDetails={client?.industry ? `Industry: ${client.industry}` : undefined}
+        itemTypeLabel="Client"
+        onConfirmDelete={handleSoftDeleteCurrentClient}
       />
     </div>
   );

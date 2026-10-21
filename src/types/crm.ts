@@ -24,6 +24,7 @@ export interface Client {
   onboarded_by?: string;
   created_at: string;
   updated_at?: string;
+  is_deleted?: boolean;
   // Computed fields
   total_tasks?: number;
   completed_tasks?: number;
@@ -45,6 +46,7 @@ export interface Task {
   delay_days?: number;
   created_at: string;
   updated_at?: string;
+  is_deleted?: boolean;
   // Joined fields
   client?: Client;
   assignee?: Profile;
@@ -58,6 +60,7 @@ export interface TaskComment {
   user_id: string;
   comment: string;
   created_at: string;
+  is_deleted?: boolean;
   user?: Profile;
 }
 

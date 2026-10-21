@@ -95,7 +95,8 @@ export default function DashboardPage() {
         const { data: commentsCountData } = await supabase
           .from('task_comments')
           .select('task_id')
-          .in('task_id', taskIds);
+          .in('task_id', taskIds)
+          .or('is_deleted.is.null,is_deleted.eq.false');
 
         if (commentsCountData) {
           commentsCountData.forEach((c: { task_id: string }) => {
@@ -134,7 +135,7 @@ export default function DashboardPage() {
     },
     whatsapp_logs: {
       title: 'WhatsApp Alert Dispatch Console',
-      subtitle: 'Real-time logs of onboarding alerts and task comment pings',
+      subtitle: 'Real-time logs of onboarding alerts and task note pings',
     },
   };
 

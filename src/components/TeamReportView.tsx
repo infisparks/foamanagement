@@ -18,6 +18,7 @@ import { Profile, Task, Client } from '@/types/crm';
 import DelayBadge, { calculateDelayInfo } from './DelayBadge';
 import { supabase } from '@/lib/supabase';
 import { generateTeamReportPDF, TaskCommentWithUser } from '@/lib/exportPdfReport';
+import { formatTimeAgo } from '@/lib/timeAgo';
 
 interface TeamReportViewProps {
   tasks: Task[];
@@ -59,6 +60,7 @@ export default function TeamReportView({
   const effectiveUserId = isTeamRole && currentUser?.id ? currentUser.id : selectedUserId;
 
   const filteredTasks = tasks.filter((task) => {
+    if (task.is_deleted) return false;
     if (effectiveUserId !== 'all' && task.assigned_to !== effectiveUserId) {
       return false;
     }
@@ -117,7 +119,8 @@ export default function TeamReportView({
           user:profiles!task_comments_user_id_fkey(name, designation, role)
         `)
         .in('task_id', taskIds)
-        .order('created_at', { ascending: true });
+        .or('is_deleted.is.null,is_deleted.eq.false')
+        .order('created_at', { ascending: false });
 
       if (!error && data) {
         const map: Record<string, TaskCommentWithUser[]> = {};
@@ -155,7 +158,8 @@ export default function TeamReportView({
             user:profiles!task_comments_user_id_fkey(name, designation, role)
           `)
           .in('task_id', taskIds)
-          .order('created_at', { ascending: true });
+          .or('is_deleted.is.null,is_deleted.eq.false')
+          .order('created_at', { ascending: false });
 
         if (data) {
           const map: Record<string, TaskCommentWithUser[]> = {};
@@ -405,7 +409,7 @@ export default function TeamReportView({
               cursor: isExporting || filteredTasks.length === 0 ? 'not-allowed' : 'pointer',
               opacity: isExporting || filteredTasks.length === 0 ? 0.7 : 1,
             }}
-            title="Download PDF report with all tasks and comments"
+            title="Download PDF report with all tasks and notes"
           >
             {isExporting ? (
               <>
@@ -538,12 +542,17 @@ export default function TeamReportView({
 
                       {/* Created Date */}
                       <td>
-                        <span style={{ fontSize: 11.5, color: '#64748B' }}>
-                          {new Date(t.created_at).toLocaleDateString([], {
-                            month: 'short',
-                            day: 'numeric',
-                          })}
-                        </span>
+                        <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                          <div>
+                            {new Date(t.created_at).toLocaleDateString([], {
+                              month: 'short',
+                              day: 'numeric',
+                            })}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#6366F1', fontWeight: 600, marginTop: 1 }}>
+                            {formatTimeAgo(t.created_at)}
+                          </div>
+                        </div>
                       </td>
 
                       {/* Deadline Date */}
@@ -561,14 +570,19 @@ export default function TeamReportView({
                       {/* Completed Date */}
                       <td>
                         {t.completed_at ? (
-                          <span style={{ fontSize: 11.5, color: '#059669', fontWeight: 500 }}>
-                            {new Date(t.completed_at).toLocaleDateString([], {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
+                          <div style={{ fontSize: 11.5, color: '#059669', fontWeight: 500 }}>
+                            <div>
+                              {new Date(t.completed_at).toLocaleDateString([], {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </div>
+                            <div style={{ fontSize: 10, color: '#059669', opacity: 0.85, marginTop: 1 }}>
+                              {formatTimeAgo(t.completed_at)}
+                            </div>
+                          </div>
                         ) : (
                           <span style={{ fontSize: 11, color: '#D97706', fontWeight: 500 }}>
                             ⏳ Pending
@@ -615,12 +629,12 @@ export default function TeamReportView({
                           }}
                           title={
                             (t.comments_count || 0) > 0
-                              ? `${t.comments_count} ${t.comments_count === 1 ? 'comment' : 'comments'} on this deliverable`
-                              : 'Comments & Collaboration'
+                              ? `${t.comments_count} ${t.comments_count === 1 ? 'note' : 'notes'} on this deliverable`
+                              : 'Notes & Collaboration'
                           }
                         >
                           <MessageSquare size={12} color={(t.comments_count || 0) > 0 ? '#4F46E5' : '#6366F1'} />
-                          <span>Comments</span>
+                          <span>Notes</span>
                           {(t.comments_count || 0) > 0 && (
                             <span
                               style={{

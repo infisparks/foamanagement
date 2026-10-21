@@ -15,11 +15,16 @@ import {
   ChevronUp,
   Trash2,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  RotateCcw
 } from 'lucide-react';
 import { Client, Task, Profile } from '@/types/crm';
 import DelayBadge from './DelayBadge';
+import DeleteTaskConfirmModal from './DeleteTaskConfirmModal';
+import DeleteConfirmModal from './DeleteConfirmModal';
 import { supabase } from '@/lib/supabase';
+import { renderTextWithLinks } from '@/lib/renderLinks';
+import { formatTimeAgo } from '@/lib/timeAgo';
 
 interface ClientsViewProps {
   clients: Client[];
@@ -46,12 +51,19 @@ export default function ClientsView({
   const [industryFilter, setIndustryFilter] = useState('all');
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null);
-  const [deletingClientId, setDeletingClientId] = useState<string | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [viewTrashClientId, setViewTrashClientId] = useState<Record<string, boolean>>({});
+  const [viewingDeletedClients, setViewingDeletedClients] = useState(false);
 
   const isAdmin = currentUser?.role === 'admin';
 
+  const activeClients = clients.filter((c) => !c.is_deleted);
+  const deletedClients = clients.filter((c) => c.is_deleted === true);
+  const sourceClients = viewingDeletedClients ? deletedClients : activeClients;
+
   // Filter clients by search query and category
-  const filteredClients = clients.filter((c) => {
+  const filteredClients = sourceClients.filter((c) => {
     const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.industry && c.industry.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (c.phone && c.phone.includes(searchQuery));
@@ -59,14 +71,16 @@ export default function ClientsView({
     return matchesSearch && matchesIndustry;
   });
 
-  // Calculate client progress
+  // Calculate client progress (ignoring soft-deleted tasks)
   function getClientStats(clientId: string) {
-    const clientTasks = tasks.filter((t) => t.client_id === clientId);
+    const allClientTasks = tasks.filter((t) => t.client_id === clientId);
+    const clientTasks = allClientTasks.filter((t) => !t.is_deleted);
+    const deletedTasks = allClientTasks.filter((t) => t.is_deleted);
     const total = clientTasks.length;
     const completed = clientTasks.filter((t) => t.status === 'completed').length;
     const pending = total - completed;
     const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
-    return { total, completed, pending, percentage, clientTasks };
+    return { total, completed, pending, percentage, clientTasks, deletedTasks };
   }
 
   // Toggle task complete / pending
@@ -115,38 +129,62 @@ export default function ClientsView({
     }
   }
 
-  // Delete Client (Admin-only)
-  async function handleDeleteClient(clientId: string, clientName: string) {
-    if (!isAdmin) return;
-    if (!confirm(`Are you sure you want to delete client "${clientName}" and all associated tasks?`)) {
+  // Soft Delete Client (Sets is_deleted: true)
+  async function handleSoftDeleteClient() {
+    if (!clientToDelete || !isAdmin) return;
+    const { error } = await supabase
+      .from('clients')
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', clientToDelete.id);
+    if (error) throw error;
+    onRefresh();
+  }
+
+  // Restore Client (Sets is_deleted: false)
+  async function handleRestoreClient(client: Client) {
+    if (!isAdmin) {
+      alert('Only administrators can restore client records.');
       return;
     }
-    setDeletingClientId(clientId);
     try {
-      const { error } = await supabase.from('clients').delete().eq('id', clientId);
+      const { error } = await supabase
+        .from('clients')
+        .update({ is_deleted: false, updated_at: new Date().toISOString() })
+        .eq('id', client.id);
       if (error) throw error;
       onRefresh();
     } catch (err: any) {
-      console.error('Failed to delete client:', err);
-      alert('Error deleting client: ' + err.message);
-    } finally {
-      setDeletingClientId(null);
+      alert('Failed to restore client: ' + err.message);
     }
   }
 
-  // Delete Task (Admin or Creator)
-  async function handleDeleteTask(taskId: string, title: string, createdBy?: string) {
-    if (!isAdmin && createdBy !== currentUser?.id) {
-      alert('Only Admin or the task creator can delete this task.');
+  // Soft Delete Task (Sets is_deleted: true)
+  async function handleSoftDeleteTask(taskId: string) {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .eq('id', taskId);
+    if (error) throw error;
+    onRefresh();
+  }
+
+  // Restore Task (Sets is_deleted: false)
+  async function handleRestoreTask(task: Task) {
+    const canRestore = isAdmin || task.assigned_to === currentUser?.id || task.created_by === currentUser?.id;
+    if (!canRestore) {
+      alert('Permission denied: You can only restore tasks assigned to or created by you.');
       return;
     }
-    if (!confirm(`Delete task "${title}"?`)) return;
     try {
-      const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+      const { error } = await supabase
+        .from('tasks')
+        .update({ is_deleted: false, updated_at: new Date().toISOString() })
+        .eq('id', task.id);
       if (error) throw error;
       onRefresh();
     } catch (err: any) {
-      alert('Failed to delete task: ' + err.message);
+      console.error('Failed to restore deliverable:', err);
+      alert('Could not restore deliverable: ' + err.message);
     }
   }
 
@@ -195,9 +233,48 @@ export default function ClientsView({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 12, color: '#64748B' }}>
-            Showing <strong>{filteredClients.length}</strong> client{filteredClients.length === 1 ? '' : 's'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setViewingDeletedClients(false)}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: !viewingDeletedClients ? 600 : 500,
+                backgroundColor: !viewingDeletedClients ? '#4F46E5' : '#F1F5F9',
+                color: !viewingDeletedClients ? '#FFFFFF' : '#475569',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Active Clients ({activeClients.length})
+            </button>
+            {deletedClients.length > 0 && (
+              <button
+                onClick={() => setViewingDeletedClients(true)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: viewingDeletedClients ? 600 : 500,
+                  backgroundColor: viewingDeletedClients ? '#DC2626' : '#FEE2E2',
+                  color: viewingDeletedClients ? '#FFFFFF' : '#DC2626',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <Trash2 size={12} />
+                <span>Trash ({deletedClients.length})</span>
+              </button>
+            )}
+            <span style={{ fontSize: 12, color: '#64748B', marginLeft: 4 }}>
+              Showing <strong>{filteredClients.length}</strong> {viewingDeletedClients ? 'deleted' : ''} client{filteredClients.length === 1 ? '' : 's'}
+            </span>
           </div>
+
           {isAdmin && (
             <button onClick={onOpenOnboardModal} className="btn-primary btn-sm">
               <Plus size={14} />
@@ -234,7 +311,7 @@ export default function ClientsView({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {filteredClients.map((client) => {
-            const { total, completed, pending, percentage, clientTasks } = getClientStats(client.id);
+            const { total, completed, pending, percentage, clientTasks, deletedTasks } = getClientStats(client.id);
             const isExpanded = expandedClientId === client.id;
 
             return (
@@ -308,6 +385,21 @@ export default function ClientsView({
                         >
                           {client.status.toUpperCase()}
                         </span>
+                        {client.is_deleted && (
+                          <span
+                            style={{
+                              fontSize: 9.5,
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              backgroundColor: '#FEF2F2',
+                              color: '#DC2626',
+                              border: '1px solid #FECACA',
+                              fontWeight: 700,
+                            }}
+                          >
+                            TRASH
+                          </span>
+                        )}
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 11, color: '#64748B', flexWrap: 'wrap' }}>
@@ -319,6 +411,9 @@ export default function ClientsView({
                         )}
                         <span>
                           Onboarded: {new Date(client.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                        <span style={{ color: '#6366F1', fontWeight: 600, fontSize: 10 }}>
+                          ({formatTimeAgo(client.created_at)})
                         </span>
                       </div>
                     </div>
@@ -376,17 +471,39 @@ export default function ClientsView({
                       </button>
 
                       {isAdmin && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteClient(client.id, client.name);
-                          }}
-                          className="btn-danger btn-sm"
-                          style={{ padding: '5px 8px' }}
-                          title="Delete client (Admin Only)"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        client.is_deleted ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRestoreClient(client);
+                            }}
+                            className="btn-secondary btn-sm"
+                            style={{
+                              padding: '5px 10px',
+                              fontSize: 12,
+                              color: '#059669',
+                              backgroundColor: '#ECFDF5',
+                              borderColor: '#A7F3D0',
+                              gap: 4,
+                            }}
+                            title="Restore client from trash"
+                          >
+                            <RotateCcw size={13} />
+                            <span>Restore</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setClientToDelete(client);
+                            }}
+                            className="btn-danger btn-sm"
+                            style={{ padding: '5px 8px' }}
+                            title="Move client to trash (Type DELETE to confirm)"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )
                       )}
 
                       <div style={{ color: '#94A3B8', display: 'flex', alignItems: 'center' }}>
@@ -412,47 +529,87 @@ export default function ClientsView({
                           color: '#334155',
                         }}
                       >
-                        <strong style={{ color: '#0F172A' }}>Client Scope & Notes:</strong> {client.notes}
+                        <strong style={{ color: '#0F172A' }}>Client Scope & Notes:</strong> {renderTextWithLinks(client.notes)}
                       </div>
                     )}
 
                     {/* Section Header */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>
-                        Deliverables & Execution Tasks ({clientTasks.length})
-                      </div>
-                      <button
-                        onClick={() => onOpenAddTask(client)}
-                        className="btn-primary btn-sm"
-                      >
-                        <Plus size={13} />
-                        <span>Add Deliverable Task</span>
-                      </button>
-                    </div>
+                    {(() => {
+                      const isViewingTrash = Boolean(viewTrashClientId[client.id]);
+                      const displayTasks = isViewingTrash ? deletedTasks : clientTasks;
 
-                    {/* Tasks List */}
-                    {clientTasks.length === 0 ? (
-                      <div
-                        style={{
-                          textAlign: 'center',
-                          padding: '28px 12px',
-                          color: '#64748B',
-                          fontSize: 12,
-                          backgroundColor: '#F8FAFC',
-                          borderRadius: 8,
-                          border: '1px dashed #CBD5E1',
-                        }}
-                      >
-                        No deliverables added yet. Click <strong>&quot;Add Deliverable Task&quot;</strong> above to log objectives.
-                      </div>
-                    ) : (
+                      return (
+                        <>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              marginBottom: 10,
+                              flexWrap: 'wrap',
+                              gap: 8,
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: isViewingTrash ? '#DC2626' : '#0F172A' }}>
+                                {isViewingTrash
+                                  ? `Trash / Deleted Tasks (${deletedTasks.length})`
+                                  : `Deliverables & Execution Tasks (${clientTasks.length})`}
+                              </div>
+                              {deletedTasks.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setViewTrashClientId((prev) => ({
+                                      ...prev,
+                                      [client.id]: !prev[client.id],
+                                    }))
+                                  }
+                                  className="btn-secondary btn-sm"
+                                  style={{
+                                    fontSize: 11,
+                                    padding: '2px 8px',
+                                    gap: 4,
+                                    color: isViewingTrash ? '#4F46E5' : '#DC2626',
+                                    backgroundColor: isViewingTrash ? '#EEF2FF' : '#FEF2F2',
+                                    borderColor: isViewingTrash ? '#C7D2FE' : '#FECACA',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  <Trash2 size={11} />
+                                  <span>{isViewingTrash ? '← Active Deliverables' : `View Trash (${deletedTasks.length})`}</span>
+                                </button>
+                              )}
+                            </div>
+                            {!isViewingTrash && (
+                              <button
+                                onClick={() => onOpenAddTask(client)}
+                                className="btn-primary btn-sm"
+                              >
+                                <Plus size={13} />
+                                <span>Add Deliverable Task</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Tasks List */}
+                          {displayTasks.length === 0 ? (
+                            <div
+                              style={{
+                                textAlign: 'center',
+                                padding: '28px 12px',
+                                color: '#64748B',
+                                fontSize: 12,
+                                backgroundColor: '#F8FAFC',
+                                borderRadius: 8,
+                                border: '1px dashed #CBD5E1',
+                              }}
+                            >
+                              {isViewingTrash
+                                ? 'No deleted tasks in Trash for this client.'
+                                : <>No deliverables added yet. Click <strong>&quot;Add Deliverable Task&quot;</strong> above to log objectives.</>}
+                            </div>
+                          ) : (
                       <div className="table-container">
                         <table className="table-clean">
                           <thead>
@@ -467,7 +624,7 @@ export default function ClientsView({
                             </tr>
                           </thead>
                           <tbody>
-                            {clientTasks.map((t) => {
+                            {displayTasks.map((t: Task) => {
                               const isComplete = t.status === 'completed';
                               const assignee = profiles.find((p) => p.id === t.assigned_to);
                               const canToggle = isAdmin || t.assigned_to === currentUser?.id;
@@ -611,9 +768,12 @@ export default function ClientsView({
                                       <div>
                                         Added: {new Date(t.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                       </div>
+                                      <div style={{ fontSize: 10, color: '#6366F1', fontWeight: 600, marginTop: 1 }}>
+                                        {formatTimeAgo(t.created_at)}
+                                      </div>
                                       {t.completed_at && (
-                                        <div style={{ color: '#059669', fontWeight: 500, marginTop: 1 }}>
-                                          Done: {new Date(t.completed_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        <div style={{ color: '#059669', fontWeight: 500, marginTop: 3 }}>
+                                          Done: {new Date(t.completed_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} ({formatTimeAgo(t.completed_at)})
                                         </div>
                                       )}
                                     </div>
@@ -645,12 +805,12 @@ export default function ClientsView({
                                         }}
                                         title={
                                           (t.comments_count || 0) > 0
-                                            ? `${t.comments_count} ${t.comments_count === 1 ? 'comment' : 'comments'} on this deliverable`
-                                            : 'Comments & Collaboration'
+                                            ? `${t.comments_count} ${t.comments_count === 1 ? 'note' : 'notes'} on this deliverable`
+                                            : 'Notes & Collaboration'
                                         }
                                       >
                                         <MessageSquare size={12} color={(t.comments_count || 0) > 0 ? '#4F46E5' : '#6366F1'} />
-                                        <span>Comments</span>
+                                        <span>Notes</span>
                                         {(t.comments_count || 0) > 0 && (
                                           <span
                                             style={{
@@ -673,15 +833,35 @@ export default function ClientsView({
                                         )}
                                       </button>
 
-                                      {(isAdmin || t.created_by === currentUser?.id) && (
+                                      {isViewingTrash ? (
                                         <button
-                                          onClick={() => handleDeleteTask(t.id, t.title, t.created_by)}
-                                          className="btn-danger btn-sm"
-                                          style={{ padding: '3px 6px' }}
-                                          title="Delete task"
+                                          onClick={() => handleRestoreTask(t)}
+                                          className="btn-secondary btn-sm"
+                                          style={{
+                                            padding: '3px 8px',
+                                            fontSize: 11.5,
+                                            gap: 4,
+                                            color: '#059669',
+                                            backgroundColor: '#ECFDF5',
+                                            borderColor: '#A7F3D0',
+                                            fontWeight: 600,
+                                          }}
+                                          title="Restore deliverable to active"
                                         >
-                                          <Trash2 size={12} />
+                                          <RotateCcw size={12} />
+                                          <span>Restore</span>
                                         </button>
+                                      ) : (
+                                        (isAdmin || t.assigned_to === currentUser?.id || t.created_by === currentUser?.id) && (
+                                          <button
+                                            onClick={() => setTaskToDelete({ ...t, client, assignee })}
+                                            className="btn-danger btn-sm"
+                                            style={{ padding: '3px 6px' }}
+                                            title="Move deliverable to Trash"
+                                          >
+                                            <Trash2 size={12} />
+                                          </button>
+                                        )
                                       )}
                                     </div>
                                   </td>
@@ -692,6 +872,9 @@ export default function ClientsView({
                         </table>
                       </div>
                     )}
+                  </>
+                );
+              })()}
                   </div>
                 )}
               </div>
@@ -699,6 +882,26 @@ export default function ClientsView({
           })}
         </div>
       )}
+
+      {/* Delete Task Confirmation Modal */}
+      <DeleteTaskConfirmModal
+        isOpen={Boolean(taskToDelete)}
+        onClose={() => setTaskToDelete(null)}
+        task={taskToDelete}
+        onConfirmDelete={handleSoftDeleteTask}
+      />
+
+      {/* Delete Client Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={Boolean(clientToDelete)}
+        onClose={() => setClientToDelete(null)}
+        title="Move Client to Trash?"
+        subtitle="Type DELETE to confirm client soft deletion"
+        itemTitle={clientToDelete?.name || ''}
+        itemDetails={clientToDelete?.industry ? `Industry: ${clientToDelete.industry}` : undefined}
+        itemTypeLabel="Client"
+        onConfirmDelete={handleSoftDeleteClient}
+      />
     </div>
   );
 }

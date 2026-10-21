@@ -162,7 +162,7 @@ export default function WhatsAppLogsView() {
 
         {logs.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '36px 10px', color: '#94A3B8', fontSize: 12 }}>
-            No dispatch logs recorded yet. Onboarding a client or commenting on a deliverable will record entries here.
+            No dispatch logs recorded yet. Onboarding a client or adding a note to a deliverable will record entries here.
           </div>
         ) : (
           <div className="table-container">
