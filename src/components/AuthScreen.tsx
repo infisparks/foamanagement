@@ -15,7 +15,6 @@ import {
   Sparkles, 
   CheckCircle2, 
   AlertCircle,
-  Zap,
   TrendingUp,
   MessageSquare
 } from 'lucide-react';
@@ -45,19 +44,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  // One-Click Admin Auto-fill
-  function fillAdminDemo() {
-    setEmail('admin@gmail.com');
-    setPassword('admin@786');
-    setErrorMsg(null);
-  }
-
-  function fillTeamDemo() {
-    setEmail('mudassirs472@gmail.com');
-    setPassword('team@786');
-    setErrorMsg(null);
-  }
 
   // Handle Login
   async function handleLogin(e: React.FormEvent) {
@@ -385,65 +371,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                 : 'Create your agency account to collaborate with team'}
             </div>
           </div>
-
-          {/* Quick Demo Credentials Auto-fill buttons */}
-          {mode === 'login' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-              {/* Admin auto-fill */}
-              <div
-                onClick={fillAdminDemo}
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: '#EEF2FF',
-                  border: '1px solid #C7D2FE',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  transition: 'all 0.15s ease',
-                }}
-                title="Click to fill admin credentials"
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Zap size={14} color="#4F46E5" />
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#4338CA' }}>
-                    Admin: admin@gmail.com / admin@786
-                  </span>
-                </div>
-                <span style={{ fontSize: 11, color: '#4F46E5', fontWeight: 600, textDecoration: 'underline' }}>
-                  Auto Fill
-                </span>
-              </div>
-
-              {/* Team Member Mudassir auto-fill */}
-              <div
-                onClick={fillTeamDemo}
-                style={{
-                  padding: '8px 12px',
-                  backgroundColor: '#F0FDF4',
-                  border: '1px solid #BBF7D0',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  transition: 'all 0.15s ease',
-                }}
-                title="Click to fill Team Mudassir credentials"
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Zap size={14} color="#15803D" />
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#166534' }}>
-                    Team: mudassirs472@gmail.com / team@786
-                  </span>
-                </div>
-                <span style={{ fontSize: 11, color: '#15803D', fontWeight: 600, textDecoration: 'underline' }}>
-                  Auto Fill
-                </span>
-              </div>
-            </div>
-          )}
 
           {errorMsg && (
             <div
