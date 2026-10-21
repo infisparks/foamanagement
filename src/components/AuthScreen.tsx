@@ -29,16 +29,16 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   
   // Login State
-  const [email, setEmail] = useState('admin@gmail.com');
-  const [password, setPassword] = useState('admin@786');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Register State
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regPhone, setRegPhone] = useState('919958399157');
+  const [regPhone, setRegPhone] = useState('');
   const [regRole, setRegRole] = useState<'admin' | 'team'>('team');
-  const [regDesignation, setRegDesignation] = useState('Meta Ads Specialist');
+  const [regDesignation, setRegDesignation] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -429,7 +429,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     className="form-input"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@gmail.com"
+                    placeholder="Enter your email address"
                     style={{ paddingLeft: 32 }}
                     required
                   />
