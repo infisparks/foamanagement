@@ -198,28 +198,44 @@ export default function TaskCommentsModal({
       setComments((prev) => [inserted as any, ...prev]);
       setNewComment('');
 
-      // 2. Direct client-side WhatsApp notification to task assignee (skip if note is added to own task)
-      const isMyOwnTask =
-        task.assigned_to === currentUser.id ||
-        task.assignee?.id === currentUser.id ||
-        (Boolean(task.assignee?.phone) && Boolean(currentUser.phone) && task.assignee?.phone === currentUser.phone);
+      // 2. Direct client-side WhatsApp notification to task assignee
+      let assigneeId = task.assigned_to || task.assignee?.id;
+      let assigneePhone = task.assignee?.phone;
+      let assigneeName = task.assignee?.name;
 
-      const assigneePhone = task.assignee?.phone;
-      const assigneeName = task.assignee?.name || 'Team Member';
+      if ((!assigneePhone || !assigneeName) && assigneeId) {
+        try {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('id, name, phone, designation')
+            .eq('id', assigneeId)
+            .single();
+          if (prof) {
+            assigneePhone = prof.phone;
+            assigneeName = prof.name;
+          }
+        } catch (e) {
+          console.warn('Could not fetch assignee profile:', e);
+        }
+      }
+
+      // Check if task belongs to current user by User ID only (never by phone number)
+      const isMyOwnTask = Boolean(assigneeId && assigneeId === currentUser.id);
 
       if (!isMyOwnTask && assigneePhone) {
+        const clientName = task.client?.name || 'Deliverable Task';
         notifyTaskAssigneeNewComment({
           taskTitle: task.title,
-          clientName: task.client?.name || 'General Client',
+          clientName,
           commenterName: currentUser.name,
           commenterDesignation: currentUser.designation,
           commentText,
           assigneePhone,
-          assigneeName,
+          assigneeName: assigneeName || 'Team Member',
         })
           .then((res) => {
             if (res.success) {
-              setWaNotificationStatus(`WhatsApp alert sent to ${assigneeName} (${assigneePhone})`);
+              setWaNotificationStatus(`WhatsApp alert sent to ${assigneeName || 'Assignee'} (${assigneePhone})`);
             } else {
               setWaNotificationStatus(`WhatsApp dispatch recorded to system logs.`);
             }
