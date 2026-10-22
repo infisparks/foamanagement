@@ -499,9 +499,288 @@ body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, a, div {
   to { transform: translateX(0); }
 }
 
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
 @media (max-width: 640px) {
   .drawer-content {
-    max-width: 100%;
+    max-width: 100% !important;
   }
 }
+
+/* Word-like Document Typography & ChatGPT Paste Styles */
+.document-content-view,
+.document-canvas-content {
+  font-family: var(--font-family);
+  color: #1E293B;
+  font-size: 16px; /* Bigger, clear font size */
+  line-height: 1.68;
+}
+
+.document-content-view h1,
+.document-canvas-content h1 {
+  font-size: 26px;
+  font-weight: 800 !important;
+  color: #0F172A;
+  margin-top: 24px;
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.document-content-view h2,
+.document-canvas-content h2 {
+  font-size: 21px;
+  font-weight: 700 !important;
+  color: #0F172A;
+  margin-top: 20px;
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.document-content-view h3,
+.document-canvas-content h3 {
+  font-size: 17.5px;
+  font-weight: 700 !important;
+  color: #0F172A;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.document-content-view p,
+.document-canvas-content p,
+.document-editing-mode p,
+.document-reading-mode p {
+  font-size: 18px !important;
+  line-height: 1.75 !important;
+  margin-bottom: 14px !important;
+  color: #334155;
+  font-weight: 400;
+}
+
+.document-content-view div:not(.chatgpt-badge):not(.doc-option-header),
+.document-canvas-content div:not(.chatgpt-badge):not(.doc-option-header),
+.document-content-view li,
+.document-canvas-content li {
+  font-size: 18px !important;
+  line-height: 1.75 !important;
+  color: #334155;
+}
+
+/* Option headers (Option 1, Option 2, Option 3, Step 1, Phase 1, etc.) */
+.doc-option-header,
+.document-content-view .doc-option-header,
+.document-canvas-content .doc-option-header {
+  font-size: 19px !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+  margin-top: 22px !important;
+  margin-bottom: 8px !important;
+  display: block !important;
+}
+
+.doc-option-header strong,
+.doc-option-header b,
+.document-content-view .doc-option-header strong,
+.document-canvas-content .doc-option-header strong {
+  font-size: 19px !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+}
+
+/* ChatGPT Pill Badge */
+.chatgpt-badge,
+.document-content-view .chatgpt-badge,
+.document-canvas-content .chatgpt-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  background-color: #DCFCE7 !important;
+  color: #15803D !important;
+  border: 1px solid #86EFAC !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 3px 12px !important;
+  border-radius: 999px !important;
+  margin: 4px 0 10px !important;
+  line-height: 1.4 !important;
+}
+
+/* Section H2 headers */
+.document-content-view h2,
+.document-canvas-content h2 {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+  margin-top: 26px !important;
+  margin-bottom: 12px !important;
+  line-height: 1.35 !important;
+}
+
+.document-content-view h3,
+.document-canvas-content h3 {
+  font-size: 19px !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+  margin-top: 22px !important;
+  margin-bottom: 8px !important;
+  line-height: 1.4 !important;
+}
+
+/* Chrome / Google Docs / Web clipboard fix: Ignore wrapper b tags with font-weight: normal */
+.document-content-view b[style*="font-weight:normal"],
+.document-canvas-content b[style*="font-weight:normal"],
+.document-content-view b[style*="font-weight: normal"],
+.document-canvas-content b[style*="font-weight: normal"],
+.document-content-view b[style*="font-weight:400"],
+.document-canvas-content b[style*="font-weight:400"],
+.document-content-view b[style*="font-weight: 400"],
+.document-canvas-content b[style*="font-weight: 400"] {
+  font-weight: 400 !important;
+  color: inherit !important;
+}
+
+/* Only genuine bold elements get font-weight 700 */
+.document-content-view strong,
+.document-canvas-content strong,
+.document-content-view b:not([style*="font-weight:normal"]):not([style*="font-weight: normal"]):not([style*="font-weight:400"]):not([style*="font-weight: 400"]),
+.document-canvas-content b:not([style*="font-weight:normal"]):not([style*="font-weight: normal"]):not([style*="font-weight:400"]):not([style*="font-weight: 400"]) {
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.document-content-view ul,
+.document-canvas-content ul {
+  list-style-type: disc;
+  padding-left: 24px;
+  margin-bottom: 14px;
+}
+
+.document-content-view ol,
+.document-canvas-content ol {
+  list-style-type: decimal;
+  padding-left: 24px;
+  margin-bottom: 14px;
+}
+
+.document-content-view li,
+.document-canvas-content li {
+  margin-bottom: 5px;
+  color: #334155;
+}
+
+.document-content-view blockquote,
+.document-canvas-content blockquote {
+  border-left: 4px solid #6366F1;
+  padding: 8px 16px;
+  margin: 14px 0;
+  background-color: #F8FAFC;
+  color: #475569;
+  font-style: italic;
+  border-radius: 0 6px 6px 0;
+}
+
+.document-content-view pre,
+.document-canvas-content pre {
+  background-color: #0F172A;
+  color: #F8FAFC;
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin: 14px 0;
+}
+
+.document-content-view code,
+.document-canvas-content code {
+  background-color: #F1F5F9;
+  color: #4338CA;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.document-content-view pre code,
+.document-canvas-content pre code {
+  background-color: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+/* Styled HTML Tables (ChatGPT Preserved) */
+.document-content-view table,
+.document-canvas-content table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  margin: 16px 0 !important;
+  font-size: 13px !important;
+  border: 1px solid #CBD5E1 !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+}
+
+.document-content-view th,
+.document-canvas-content th {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
+  font-weight: 700 !important;
+  text-align: left !important;
+  padding: 10px 14px !important;
+  border: 1px solid #CBD5E1 !important;
+}
+
+.document-content-view td,
+.document-canvas-content td {
+  padding: 9px 14px !important;
+  border: 1px solid #CBD5E1 !important;
+  color: #334155 !important;
+  vertical-align: top !important;
+}
+
+.document-content-view tr:nth-child(even),
+.document-canvas-content tr:nth-child(even) {
+  background-color: #FAFAFA !important;
+}
+
+/* Document Images: Proper curved border, centered, and contained inside page */
+.document-content-view img,
+.document-canvas-content img,
+.document-editing-mode img,
+.document-reading-mode img {
+  display: block !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin: 24px auto !important;
+  border-radius: 12px !important;
+  border: 1px solid #E2E8F0 !important;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -2px rgba(15, 23, 42, 0.04) !important;
+  box-sizing: border-box !important;
+  object-fit: contain !important;
+}
+
+.document-content-view figure,
+.document-canvas-content figure {
+  margin: 24px auto !important;
+  text-align: center !important;
+  max-width: 100% !important;
+}
+
+.document-content-view figure img,
+.document-canvas-content figure img {
+  margin: 0 auto !important;
+}
+
+/* Print Protection for non-admin team members */
+@media print {
+  .team-guidance-print-locked {
+    display: none !important;
+  }
+}
+
 

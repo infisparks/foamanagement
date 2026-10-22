@@ -9,7 +9,7 @@ import { sendWhatsAppNotification } from '@/lib/whatsapp';
 export default function WhatsAppLogsView() {
   const [logs, setLogs] = useState<WhatsAppLog[]>([]);
   const [loading, setLoading] = useState(false);
-  const [testNumber, setTestNumber] = useState('919958399157');
+  const [testNumber, setTestNumber] = useState('');
   const [testText, setTestText] = useState('Hello! This is a real-time WhatsApp alert test from First Option Agency CRM.');
   const [sendingTest, setSendingTest] = useState(false);
   const [testStatus, setTestStatus] = useState<string | null>(null);
@@ -100,7 +100,7 @@ export default function WhatsAppLogsView() {
               className="form-input"
               value={testNumber}
               onChange={(e) => setTestNumber(e.target.value)}
-              placeholder="919958399157"
+              placeholder="e.g. 919876543210"
               required
             />
           </div>

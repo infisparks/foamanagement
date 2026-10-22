@@ -182,7 +182,7 @@ export default function OnboardClientModal({
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. 919958399157"
+                  placeholder="e.g. 919876543210"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                 />

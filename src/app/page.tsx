@@ -9,22 +9,24 @@ import ClientsView from '@/components/ClientsView';
 import TeamReportView from '@/components/TeamReportView';
 import TeamMembersView from '@/components/TeamMembersView';
 import WhatsAppLogsView from '@/components/WhatsAppLogsView';
+import TeamGuidanceView from '@/components/TeamGuidanceView';
 import OnboardClientModal from '@/components/OnboardClientModal';
 import AddTaskModal from '@/components/AddTaskModal';
 import TaskCommentsModal from '@/components/TaskCommentsModal';
 import { supabase } from '@/lib/supabase';
-import { Profile, Client, Task } from '@/types/crm';
+import { Profile, Client, Task, Designation } from '@/types/crm';
 import { RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function DashboardPage() {
   const { currentUser, loading: authLoading, logout } = useAuth();
   const router = useRouter();
 
-  const [currentTab, setCurrentTab] = useState<'clients' | 'team_report' | 'members' | 'whatsapp_logs'>('clients');
+  const [currentTab, setCurrentTab] = useState<'clients' | 'team_report' | 'guidance' | 'members' | 'whatsapp_logs'>('clients');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Core Data States
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [designations, setDesignations] = useState<Designation[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
@@ -48,6 +50,17 @@ export default function DashboardPage() {
       setCurrentTab('clients');
     }
   }, [currentUser, currentTab]);
+
+  // Read URL query tab parameter if navigated from subpages
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam && ['clients', 'team_report', 'guidance', 'members', 'whatsapp_logs'].includes(tabParam)) {
+        setCurrentTab(tabParam as any);
+      }
+    }
+  }, []);
 
   // Load CRM data whenever currentUser is available
   useEffect(() => {
@@ -111,6 +124,16 @@ export default function DashboardPage() {
           comments_count: commentCountMap[t.id] || 0,
         }))
       );
+
+      // 4. Fetch designations
+      const { data: designationsData, error: desigErr } = await supabase
+        .from('designations')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (!desigErr && designationsData) {
+        setDesignations(designationsData);
+      }
     } catch (err: any) {
       console.error('Error fetching CRM data:', err);
       setErrorMsg(err.message || 'Failed to connect to database');
@@ -128,6 +151,10 @@ export default function DashboardPage() {
     team_report: {
       title: 'Team Management & Salary Review',
       subtitle: 'Audit completed work, pending tasks, and delay penalties by date range',
+    },
+    guidance: {
+      title: 'Team Guidance & Knowledge Base',
+      subtitle: 'Word-style documentation, ChatGPT imports, standard procedures & access permissions',
     },
     members: {
       title: 'Agency Team Directory',
@@ -203,10 +230,10 @@ export default function DashboardPage() {
             <div
               style={{
                 padding: '12px 16px',
-                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                backgroundColor: '#FEF2F2',
                 borderRadius: 8,
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#FCA5A5',
+                border: '1px solid #FECACA',
+                color: '#DC2626',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -235,11 +262,11 @@ export default function DashboardPage() {
                 justifyContent: 'center',
                 height: 320,
                 gap: 12,
-                color: '#94A3B8',
+                color: '#64748B',
               }}
             >
               <RefreshCw size={24} className="animate-spin" color="#6366F1" />
-              <div style={{ fontSize: 13, fontWeight: 500, color: '#E2E8F0' }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#334155' }}>
                 Syncing workspace from Supabase...
               </div>
             </div>
@@ -268,10 +295,19 @@ export default function DashboardPage() {
                 />
               )}
 
+              {currentTab === 'guidance' && (
+                <TeamGuidanceView
+                  currentUser={currentUser}
+                  profiles={profiles}
+                  designations={designations}
+                />
+              )}
+
               {currentTab === 'members' && isAdmin && (
                 <TeamMembersView
                   profiles={profiles}
                   tasks={tasks}
+                  designations={designations}
                   currentUser={currentUser}
                   onRefresh={fetchCRMData}
                 />

@@ -37,7 +37,6 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
-  const [regRole, setRegRole] = useState<'admin' | 'team'>('team');
   const [regDesignation, setRegDesignation] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
@@ -100,7 +99,8 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
     try {
       const userId: string = crypto.randomUUID();
 
-      // Insert into profiles table
+      // Insert into profiles table - new public signups are ALWAYS created with 'team' role
+      // to prevent anyone from registering as an unauthorized Administrator
       const { data: newProfile, error: insertError } = await supabase
         .from('profiles')
         .insert({
@@ -108,10 +108,10 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           name: regName.trim(),
           email: cleanEmail,
           phone: regPhone.trim(),
-          role: regRole,
-          designation: regDesignation.trim() || (regRole === 'admin' ? 'Agency Director' : 'Team Member'),
+          role: 'team',
+          designation: regDesignation.trim() || 'Team Member',
           password: regPassword,
-          avatar_url: `https://images.unsplash.com/photo-${regRole === 'admin' ? '1534528741775-53994a69daeb' : '1507003211169-0a1dd7228f2d'}?w=120&auto=format&fit=crop&q=80`,
+          avatar_url: `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80`,
         })
         .select()
         .single();
@@ -538,7 +538,7 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     className="form-input"
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="user@gmail.com"
+                    placeholder="name@agency.com"
                     required
                   />
                 </div>
@@ -552,39 +552,23 @@ export default function AuthScreen({ onAuthenticated }: AuthScreenProps) {
                     className="form-input"
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
-                    placeholder="919958399157"
+                    placeholder="e.g. 919876543210"
                     required
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <label className="form-label">
-                    Role Assignment
-                  </label>
-                  <select
-                    className="form-select"
-                    value={regRole}
-                    onChange={(e) => setRegRole(e.target.value as any)}
-                  >
-                    <option value="team">Team Member</option>
-                    <option value="admin">Administrator (Full Access)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="form-label">
-                    Department / Designation
-                  </label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={regDesignation}
-                    onChange={(e) => setRegDesignation(e.target.value)}
-                    placeholder="Meta Ads, SEO, Creative..."
-                  />
-                </div>
+              <div>
+                <label className="form-label">
+                  Department / Designation
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={regDesignation}
+                  onChange={(e) => setRegDesignation(e.target.value)}
+                  placeholder="Meta Ads, SEO, Creative, Client Ops..."
+                />
               </div>
 
               <div>

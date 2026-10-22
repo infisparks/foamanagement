@@ -72,7 +72,7 @@ function ClientTasksContent({ params }: ClientTasksPageProps) {
   const router = useRouter();
 
   // Sidebar navigation state
-  const [currentTab, setCurrentTab] = useState<'clients' | 'team_report' | 'members' | 'whatsapp_logs'>('clients');
+  const [currentTab, setCurrentTab] = useState<'clients' | 'team_report' | 'members' | 'whatsapp_logs' | 'guidance'>('clients');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Data states

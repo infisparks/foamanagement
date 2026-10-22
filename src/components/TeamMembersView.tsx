@@ -1,15 +1,31 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Users, Plus, Mail, Shield, UserCheck, X, Check, Smartphone, Edit2, Save, RefreshCw, AlertCircle } from 'lucide-react';
-import { Profile, Task } from '@/types/crm';
+import { 
+  Users, 
+  Plus, 
+  Mail, 
+  Shield, 
+  UserCheck, 
+  X, 
+  Check, 
+  Smartphone, 
+  Edit2, 
+  Save, 
+  RefreshCw, 
+  AlertCircle,
+  Briefcase
+} from 'lucide-react';
+import { Profile, Task, Designation } from '@/types/crm';
 import { supabase } from '@/lib/supabase';
 import { sendWhatsAppNotification } from '@/lib/whatsapp';
 import { useAuth } from '@/context/AuthContext';
+import DesignationsSidebar from '@/components/DesignationsSidebar';
 
 interface TeamMembersViewProps {
   profiles: Profile[];
   tasks: Task[];
+  designations?: Designation[];
   currentUser: Profile | null;
   onRefresh: () => void;
 }
@@ -17,19 +33,24 @@ interface TeamMembersViewProps {
 export default function TeamMembersView({
   profiles,
   tasks,
+  designations = [],
   currentUser,
   onRefresh,
 }: TeamMembersViewProps) {
   const { refreshProfile } = useAuth();
 
+  // Designations Sidebar State
+  const [isDesignationsSidebarOpen, setIsDesignationsSidebarOpen] = useState(false);
+
   // Add Member Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('919958399157');
+  const [phone, setPhone] = useState('');
   const [role, setRole] = useState<'admin' | 'team'>('team');
-  const [designation, setDesignation] = useState('');
-  const [password, setPassword] = useState('team@786');
+  const [designationId, setDesignationId] = useState('');
+  const [customDesignation, setCustomDesignation] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -37,7 +58,8 @@ export default function TeamMembersView({
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
-  const [editDesignation, setEditDesignation] = useState('');
+  const [editDesignationId, setEditDesignationId] = useState('');
+  const [editCustomDesignation, setEditCustomDesignation] = useState('');
   const [editRole, setEditRole] = useState<'admin' | 'team'>('team');
   const [updating, setUpdating] = useState(false);
   const [editErrorMsg, setEditErrorMsg] = useState('');
@@ -48,11 +70,12 @@ export default function TeamMembersView({
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
   const isAdmin = currentUser?.role === 'admin';
+  const activeDesignations = designations.filter((d) => !d.is_deleted);
 
   async function handleAddMember(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !phone.trim()) {
-      setErrorMsg('Name, email, and WhatsApp phone number are required.');
+    if (!name.trim() || !email.trim() || !phone.trim() || !password.trim()) {
+      setErrorMsg('Name, email, WhatsApp phone number, and password are required.');
       return;
     }
 
@@ -63,14 +86,22 @@ export default function TeamMembersView({
       const cleanEmail = email.trim().toLowerCase();
       const userId = crypto.randomUUID();
 
+      // Resolve designation title & foreign key ID
+      const selectedDesig = designations.find((d) => d.id === designationId);
+      const finalTitle = selectedDesig 
+        ? selectedDesig.title 
+        : (customDesignation.trim() || (role === 'admin' ? 'Agency Director' : 'Team Specialist'));
+      const finalDesigId = selectedDesig ? selectedDesig.id : null;
+
       const { error } = await supabase.from('profiles').insert({
         id: userId,
         name: name.trim(),
         email: cleanEmail,
         phone: phone.trim(),
         role,
-        designation: designation.trim() || (role === 'admin' ? 'Agency Director' : 'Team Specialist'),
-        password: password.trim() || 'team@786',
+        designation: finalTitle,
+        designation_id: finalDesigId,
+        password: password.trim(),
         avatar_url: `https://images.unsplash.com/photo-${role === 'admin' ? '1534528741775-53994a69daeb' : '1507003211169-0a1dd7228f2d'}?w=120&auto=format&fit=crop&q=80`,
       });
 
@@ -78,8 +109,10 @@ export default function TeamMembersView({
 
       setName('');
       setEmail('');
-      setPhone('919958399157');
-      setDesignation('');
+      setPhone('');
+      setPassword('');
+      setDesignationId('');
+      setCustomDesignation('');
       setIsModalOpen(false);
       onRefresh();
     } catch (err: any) {
@@ -95,7 +128,19 @@ export default function TeamMembersView({
     setEditingProfile(p);
     setEditName(p.name);
     setEditPhone(p.phone || '');
-    setEditDesignation(p.designation || '');
+    
+    // Find matching designation by foreign key or title
+    const matched = designations.find(
+      (d) => d.id === p.designation_id || (!d.is_deleted && d.title.toLowerCase() === (p.designation || '').toLowerCase())
+    );
+    if (matched) {
+      setEditDesignationId(matched.id);
+      setEditCustomDesignation('');
+    } else {
+      setEditDesignationId(p.designation_id || '');
+      setEditCustomDesignation(p.designation || '');
+    }
+
     setEditRole(p.role || 'team');
     setEditErrorMsg('');
   }
@@ -113,12 +158,19 @@ export default function TeamMembersView({
     setEditErrorMsg('');
 
     try {
+      const selectedDesig = designations.find((d) => d.id === editDesignationId);
+      const finalTitle = selectedDesig 
+        ? selectedDesig.title 
+        : (editCustomDesignation.trim() || editingProfile.designation || 'Team Member');
+      const finalDesigId = selectedDesig ? selectedDesig.id : (editDesignationId || null);
+
       const { error } = await supabase
         .from('profiles')
         .update({
           name: editName.trim(),
           phone: editPhone.trim(),
-          designation: editDesignation.trim() || 'Team Member',
+          designation: finalTitle,
+          designation_id: finalDesigId,
           role: editRole,
           updated_at: new Date().toISOString(),
         })
@@ -192,13 +244,44 @@ export default function TeamMembersView({
         </div>
 
         {isAdmin && (
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="btn-primary btn-sm"
-          >
-            <Plus size={14} />
-            <span>Add Team Member</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setIsDesignationsSidebarOpen(true)}
+              className="btn-secondary btn-sm"
+              style={{
+                gap: 6,
+                borderColor: '#C7D2FE',
+                color: '#4338CA',
+                backgroundColor: '#FAFAFF',
+              }}
+              title="Open Designations & Roles Sidebar"
+            >
+              <Briefcase size={14} color="#6366F1" />
+              <span>Designations</span>
+              <span
+                style={{
+                  backgroundColor: '#EEF2FF',
+                  color: '#4F46E5',
+                  padding: '1px 7px',
+                  borderRadius: 999,
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  border: '1px solid #E0E7FF',
+                }}
+              >
+                {activeDesignations.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="btn-primary btn-sm"
+            >
+              <Plus size={14} />
+              <span>Add Team Member</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -259,6 +342,9 @@ export default function TeamMembersView({
               const memberTasks = tasks.filter((t) => t.assigned_to === p.id && !t.is_deleted);
               const completedCount = memberTasks.filter((t) => t.status === 'completed').length;
               const isPinging = testingPhone === p.id;
+              const linkedDesig = designations.find(
+                (d) => d.id === p.designation_id || (!p.designation_id && d.title.toLowerCase() === (p.designation || '').toLowerCase())
+              );
 
               return (
                 <tr key={p.id}>
@@ -294,8 +380,25 @@ export default function TeamMembersView({
                         <div style={{ fontWeight: 600, color: '#0F172A', fontSize: 13 }}>
                           {p.name}
                         </div>
-                        <div style={{ fontSize: 11, color: '#64748B' }}>
-                          {p.designation}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 11, color: '#475569', fontWeight: 500 }}>
+                            {p.designation || linkedDesig?.title || 'Team Member'}
+                          </span>
+                          {linkedDesig?.department && (
+                            <span
+                              style={{
+                                fontSize: 9.5,
+                                padding: '1px 5px',
+                                borderRadius: 4,
+                                backgroundColor: '#F1F5F9',
+                                color: '#64748B',
+                                border: '1px solid #E2E8F0',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {linkedDesig.department}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -435,7 +538,7 @@ export default function TeamMembersView({
                     <input
                       type="email"
                       className="form-input"
-                      placeholder="user@gmail.com"
+                      placeholder="name@agency.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
@@ -447,7 +550,7 @@ export default function TeamMembersView({
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="919958399157"
+                      placeholder="e.g. 919876543210"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       required
@@ -469,25 +572,75 @@ export default function TeamMembersView({
                   </div>
 
                   <div>
-                    <label className="form-label">Department / Designation</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="Meta Ads, SEO, Creative..."
-                      value={designation}
-                      onChange={(e) => setDesignation(e.target.value)}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label className="form-label" style={{ margin: 0 }}>Designation *</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsModalOpen(false);
+                          setIsDesignationsSidebarOpen(true);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#4F46E5',
+                          fontSize: 11,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          padding: 0,
+                        }}
+                      >
+                        <Briefcase size={11} />
+                        <span>Manage / Add</span>
+                      </button>
+                    </div>
+
+                    <select
+                      className="form-select"
+                      value={designationId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDesignationId(val);
+                        if (val !== 'custom') {
+                          setCustomDesignation('');
+                        }
+                      }}
+                    >
+                      <option value="">Select official designation...</option>
+                      {activeDesignations.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.title} {d.department ? `(${d.department})` : ''}
+                        </option>
+                      ))}
+                      <option value="custom">Other / Custom Title</option>
+                    </select>
+
+                    {designationId === 'custom' && (
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Enter custom designation title..."
+                        value={customDesignation}
+                        onChange={(e) => setCustomDesignation(e.target.value)}
+                        style={{ marginTop: 6 }}
+                        autoFocus
+                      />
+                    )}
                   </div>
                 </div>
 
                 <div>
-                  <label className="form-label">Login Password</label>
+                  <label className="form-label">Login Password *</label>
                   <input
                     type="password"
                     className="form-input"
-                    placeholder="team@786"
+                    placeholder="Enter secure password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    required
                   />
                 </div>
               </div>
@@ -621,7 +774,7 @@ export default function TeamMembersView({
                     <input
                       type="text"
                       className="form-input"
-                      placeholder="e.g. 919958399157"
+                      placeholder="e.g. 919876543210"
                       value={editPhone}
                       onChange={(e) => setEditPhone(e.target.value)}
                       required
@@ -647,14 +800,65 @@ export default function TeamMembersView({
                   </div>
 
                   <div>
-                    <label className="form-label">Department / Designation</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Meta Ads, SEO, Creative..."
-                      value={editDesignation}
-                      onChange={(e) => setEditDesignation(e.target.value)}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <label className="form-label" style={{ margin: 0 }}>Designation *</label>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProfile(null);
+                            setIsDesignationsSidebarOpen(true);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#4F46E5',
+                            fontSize: 11,
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            padding: 0,
+                          }}
+                        >
+                          <Briefcase size={11} />
+                          <span>Manage / Add</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <select
+                      className="form-select"
+                      value={editDesignationId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditDesignationId(val);
+                        if (val !== 'custom') {
+                          setEditCustomDesignation('');
+                        }
+                      }}
+                    >
+                      <option value="">Select official designation...</option>
+                      {activeDesignations.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.title} {d.department ? `(${d.department})` : ''}
+                        </option>
+                      ))}
+                      <option value="custom">Other / Custom Title</option>
+                    </select>
+
+                    {editDesignationId === 'custom' && (
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="Enter custom designation title..."
+                        value={editCustomDesignation}
+                        onChange={(e) => setEditCustomDesignation(e.target.value)}
+                        style={{ marginTop: 6 }}
+                        autoFocus
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -699,6 +903,15 @@ export default function TeamMembersView({
           </div>
         </div>
       )}
+
+      {/* Designations Management Slide-Over Sidebar */}
+      <DesignationsSidebar
+        isOpen={isDesignationsSidebarOpen}
+        onClose={() => setIsDesignationsSidebarOpen(false)}
+        designations={designations}
+        profiles={profiles}
+        onRefresh={onRefresh}
+      />
     </div>
   );
 }

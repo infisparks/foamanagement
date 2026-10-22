@@ -11,13 +11,14 @@ import {
   ChevronRight,
   LogOut,
   Shield,
-  UserCheck
+  UserCheck,
+  BookOpen
 } from 'lucide-react';
 import { Profile } from '@/types/crm';
 
 interface SidebarProps {
-  currentTab: 'clients' | 'team_report' | 'members' | 'whatsapp_logs';
-  setCurrentTab: (tab: 'clients' | 'team_report' | 'members' | 'whatsapp_logs') => void;
+  currentTab: 'clients' | 'team_report' | 'members' | 'whatsapp_logs' | 'guidance';
+  setCurrentTab: (tab: 'clients' | 'team_report' | 'members' | 'whatsapp_logs' | 'guidance') => void;
   currentUser: Profile | null;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
@@ -47,6 +48,13 @@ export default function Sidebar({
       label: 'Team & Salary Report',
       icon: TrendingUp,
       desc: 'Delay calculations & audit',
+      adminOnly: false,
+    },
+    {
+      id: 'guidance' as const,
+      label: 'Team Guidance',
+      icon: BookOpen,
+      desc: 'Word SOPs & research library',
       adminOnly: false,
     },
     {
